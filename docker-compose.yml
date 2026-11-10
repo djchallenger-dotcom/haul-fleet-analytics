@@ -1,1 +1,18 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: haul-fleet-pg
+    environment:
+      POSTGRES_USER: fleet
+      POSTGRES_PASSWORD: fleet       # local demo only
+      POSTGRES_DB: haul_fleet
+    ports:
+      - "5432:5432"
+    volumes:
+      # Every .sql file in this folder runs automatically, in name order,
+      # the first time the container starts with an empty data volume.
+      - ./schema/postgres:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
 
+volumes:
+  pgdata:
