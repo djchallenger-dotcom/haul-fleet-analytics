@@ -17,3 +17,31 @@ SELECT
 FROM haul_cycle hc 
 GROUP BY (DATE_TRUNC('month', hc.dump_end_ts, 'America/Phoenix') AT TIME ZONE 'America/Phoenix')::DATE
 ORDER BY month;
+
+
+
+/*
+Q2: Where does haul cycle time go, and does it differ between
+day and night shift?
+Each stage is the gap between consecutive cycle timestamps
+(queue -> load -> loaded haul -> dump -> empty return); the five
+stages sum to the total cycle time.
+Finding: night cycles average X min longer than day (Y vs Z min).
+The gap comes from queue, loaded haul, and empty return; load and
+dump times are flat because they depend on the shovel and truck
+body, not the operator or visibility.
+ */
+
+SELECT 
+    sh.shift_type AS shift_type,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.load_start_ts - hc.arrive_shovel_ts))/60), 1) AS queue,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.load_end_ts - hc.load_start_ts))/60), 1) AS load,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.dump_start_ts - hc.load_end_ts))/60), 1) AS loaded_haul,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.dump_end_ts - hc.dump_start_ts))/60), 1) AS dump,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.cycle_end_ts - hc.dump_end_ts))/60), 1) AS empty_return,
+    ROUND(AVG(EXTRACT(EPOCH FROM(hc.cycle_end_ts - hc.arrive_shovel_ts))/60), 1) AS total_cycle_time
+FROM haul_cycle hc
+INNER JOIN shift sh ON hc.shift_id = sh.shift_id
+GROUP BY sh.shift_type
+ORDER BY sh.shift_type
+;
