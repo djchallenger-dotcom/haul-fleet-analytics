@@ -45,3 +45,56 @@ SELECT
     ROUND(p90_minutes/median_minutes, 2) AS p90_to_median
 FROM base_stats
 ORDER BY p90_to_median DESC;
+
+
+
+/*
+Q2: How much time passes between a truck's consecutive cycles,
+and where does that unrecorded time go?
+LAG() looks up the previous cycle's end time for the same truck;
+the gap is the time from that cycle ending to the next one starting.
+Each truck's first cycle has no previous cycle and is excluded.
+Finding: 95% of cycles (141,978) follow the previous one with no gap.
+The 30 min to 2 h bucket (7,291 gaps, ~6,500 h) is mostly shift
+changes, since every shift change leaves at least 35 minutes between
+cycles. The over 2 h bucket holds only 1,243 gaps but ~9,700 h,
+about 60% of all lost time; these are downtime events, often
+spanning more than one shift. A small number of long stoppages
+costs more than all routine interruptions combined.
+*/
+
+WITH cycles AS (
+    SELECT
+        hc.truck_id,
+        hc.shift_id,
+        hc.arrive_shovel_ts,
+        LAG(hc.cycle_end_ts) OVER (PARTITION BY hc.truck_id ORDER BY hc.arrive_shovel_ts) AS prev_cycle_end
+    FROM haul_cycle hc 
+),
+time_gaps AS (
+    SELECT 
+        arrive_shovel_ts,
+        prev_cycle_end,
+        EXTRACT(EPOCH FROM(arrive_shovel_ts - prev_cycle_end))/60 AS gap_minutes
+    FROM cycles
+),
+time_buckets AS (
+    SELECT 
+    gap_minutes,
+    CASE WHEN gap_minutes = 0 THEN 'continuous'
+         WHEN gap_minutes < 30 THEN 'under 30 min'
+         WHEN gap_minutes < 120 THEN '30 min to 2 hours'
+         ELSE 'over 2 hours'
+         END AS gap_bucket
+    FROM time_gaps
+    WHERE prev_cycle_end IS NOT NULL
+)
+
+SELECT
+    gap_bucket,
+    COUNT(*) AS gap_count,
+    ROUND(SUM(gap_minutes) / 60, 1) AS total_gap_hours
+FROM time_buckets
+GROUP BY gap_bucket
+ORDER BY MIN(gap_minutes);
+
