@@ -92,3 +92,54 @@ LEFT JOIN maintenance m ON eq.equipment_id = m.equipment_id
 CROSS JOIN period p
 WHERE em.equipment_type = 'haul_truck'
 ORDER BY availability;
+
+
+
+/*
+Q4: Which haul trucks are most productive?
+Productivity = tonnes moved per operating hour, where operating hours
+is time spent in haul cycles (arrive at shovel to back at shovel).
+Downtime and shift changes are excluded, so this measures how well a
+truck works while running, not how often it runs (see Q3).
+Two ranks: fleet_rank compares all trucks; model_rank compares each
+truck only against the same model, since payload capacity differs.
+Finding: fleet rank is decided by model. All 930Es (290 t) rank 1-8
+at ~584-589 t/h; all 793Fs (227 t) rank 9-20 at ~459-463 t/h.
+Within each model the spread is only ~1%, because trucks rotate
+between shovels and operators each shift. Variation between
+operators is examined in 03_shift_comparison.sql.
+*/
+
+WITH truck_totals AS (
+    SELECT 
+        hc.truck_id,
+        eq.unit_number,
+        eqm.manufacturer,
+        eqm.model_name,
+        eqm.payload_capacity_tonnes,
+        SUM(hc.payload_tonnes) AS total_tonnes,
+        EXTRACT(EPOCH FROM(SUM(hc.cycle_end_ts - hc.arrive_shovel_ts )))/3600 AS operating_hours
+    FROM haul_cycle hc
+    INNER JOIN equipment eq ON hc.truck_id = eq.equipment_id
+    INNER JOIN equipment_model eqm ON eq.model_id = eqm.model_id
+    WHERE eqm.equipment_type = 'haul_truck'
+    GROUP BY hc.truck_id, 
+        eq.unit_number, 
+        eqm.manufacturer, 
+        eqm.model_name, 
+        eqm.payload_capacity_tonnes
+)
+
+SELECT
+    tt.truck_id,
+    tt.unit_number,
+    tt.manufacturer,
+    tt.model_name,
+    tt.payload_capacity_tonnes,
+    ROUND(tt.total_tonnes, 0) AS total_tonnes,
+    ROUND(tt.operating_hours, 0) AS operating_hours,
+    ROUND(tt.total_tonnes / tt.operating_hours, 1) AS tonnes_per_hour,
+    RANK() OVER (ORDER BY tt.total_tonnes/tt.operating_hours DESC) AS fleet_rank,
+    RANK() OVER (PARTITION BY tt.model_name ORDER BY tt.total_tonnes/tt.operating_hours DESC) AS model_rank
+FROM truck_totals tt
+ORDER BY fleet_rank;
