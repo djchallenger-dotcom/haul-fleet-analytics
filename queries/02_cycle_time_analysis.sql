@@ -98,3 +98,57 @@ FROM time_buckets
 GROUP BY gap_bucket
 ORDER BY MIN(gap_minutes);
 
+
+
+/*
+Q3: Which haul cycles are outliers for their route?
+An outlier is a cycle taking more than twice its route's median time.
+The median is calculated per route (load / dump location pair) in a
+CTE and joined back to each cycle, because PERCENTILE_CONT cannot be
+used as a window function in PostgreSQL.
+Finding: only 43 of 150,584 cycles (0.03%) are outliers, and the
+long crusher haul has none. Over half (24) fall on the shortest
+route, South Pit Face to West Waste Dump, consistent with Q1's
+finding that short routes are the least predictable. The worst
+cycle runs 2.6 times its route median.
+Outliers are rare because the data generator ends a cycle when
+downtime starts instead of stretching it. In real fleet data, this
+check would flag delays that were never logged as downtime.
+*/
+
+WITH route_median AS (
+    SELECT 
+        loadloc.location_id AS load_location_id,
+        dumploc.location_id AS dump_location_id,
+        loadloc.name AS load_location,
+        dumploc.name AS dump_location,
+        COUNT(*) AS cycle_count,
+        (PERCENTILE_CONT(0.5) WITHIN GROUP (
+            ORDER BY EXTRACT(EPOCH FROM (hc.cycle_end_ts - hc.arrive_shovel_ts)) / 60
+            ))::NUMERIC
+             AS median_minutes
+    FROM haul_cycle hc 
+    INNER JOIN location loadloc ON hc.load_location_id = loadloc.location_id
+    INNER JOIN location dumploc ON hc.dump_location_id = dumploc.location_id
+    GROUP BY loadloc.location_id, dumploc.location_id
+)
+
+SELECT
+    rm.load_location || ' to ' || rm.dump_location AS route,
+    rm.cycle_count,
+    ROUND(rm.median_minutes, 1) AS median_minutes,
+    COUNT(*) FILTER (
+        WHERE EXTRACT(EPOCH FROM (hc.cycle_end_ts - hc.arrive_shovel_ts)) / 60
+              > 2 * rm.median_minutes
+        ) AS outlier_count,
+    ROUND(100.0 * COUNT(*) FILTER (
+        WHERE EXTRACT(EPOCH FROM (hc.cycle_end_ts - hc.arrive_shovel_ts)) / 60
+              > 2 * rm.median_minutes
+        ) / rm.cycle_count, 2) AS outlier_pct
+FROM route_median rm
+INNER JOIN haul_cycle hc
+    ON  hc.load_location_id = rm.load_location_id
+    AND hc.dump_location_id = rm.dump_location_id
+GROUP BY rm.load_location, rm.dump_location, rm.cycle_count, rm.median_minutes
+ORDER BY outlier_count DESC;
+
