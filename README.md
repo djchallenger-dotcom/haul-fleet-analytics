@@ -12,6 +12,8 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 - **Night shift cycles run 2.2 minutes (8%) longer than day shift** (29.3 vs. 27.1 min). The extra time comes from queueing, loaded haul, and empty return; loading and dumping times are unchanged, which points to visibility and travel speed rather than equipment.
 - **Physical availability ranges from 86.7% to 92.5% across the fleet.** Downtime events are clipped to the reporting window, and events still open at period end are counted through the end of the window rather than silently dropped.
 - **Truck productivity is decided by model, not by individual truck.** Every 930E outranks every 793F (about 587 vs. 460 tonnes per operating hour, in line with their 290 t vs. 227 t payloads), while trucks of the same model fall within about 1% of each other.
+- **Short routes are the least predictable.** The shortest haul has a 90th-percentile cycle time 1.24 times its median, against 1.17 for the long crusher haul. Shovel queue time varies by about the same amount on every route, so it makes up a larger share of short cycles; better dispatching would pay off most on the short waste routes.
+- **A few long stoppages cost more than all routine interruptions combined.** 95% of cycles start the moment the previous one ends. Only 1,243 gaps between cycles last over two hours, yet they account for about 60% of all time lost between cycles.
 
 ## What this project demonstrates
 
@@ -24,6 +26,9 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 | Time zone handling for month boundaries | `queries/01_fleet_kpis.sql` (Q1) |
 | CTEs, interval clipping, and NULL handling for open events | `queries/01_fleet_kpis.sql` (Q3) |
 | Window functions: fleet-wide and partitioned ranking | `queries/01_fleet_kpis.sql` (Q4) |
+| Percentiles with `PERCENTILE_CONT ... WITHIN GROUP` and joining the same table twice | `queries/02_cycle_time_analysis.sql` (Q1) |
+| `LAG` to measure gaps between consecutive rows, bucketed with `CASE` | `queries/02_cycle_time_analysis.sql` (Q2) |
+| Outlier detection against a per-group median (aggregate CTE joined back to detail rows) | `queries/02_cycle_time_analysis.sql` (Q3) |
 | Reproducible synthetic data, bulk-loaded with `COPY` | `data/generate.py` |
 
 ## Data model
@@ -82,7 +87,8 @@ haul-fleet-analytics/
 ├── schema/postgres/schema.sql     Tables, constraints, partitions, indexes
 ├── data/generate.py               Seeded synthetic data generator
 ├── queries/
-│   └── 01_fleet_kpis.sql          Tonnes, cycle stages, availability, productivity
+│   ├── 01_fleet_kpis.sql          Tonnes, cycle stages, availability, productivity
+│   └── 02_cycle_time_analysis.sql Route percentiles, gaps between cycles, outliers
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -91,7 +97,7 @@ haul-fleet-analytics/
 
 - [x] Schema, data generator, and Docker setup
 - [x] Fleet KPIs: tonnes, cycle breakdown, availability, productivity
-- [ ] Cycle time analysis: percentiles, gaps between cycles, outliers
+- [x] Cycle time analysis: percentiles, gaps between cycles, outliers
 - [ ] Shift and operator performance comparison
 - [ ] Downtime analysis: gaps and islands, recursive failure roll-up
 - [ ] Query performance tuning with `EXPLAIN ANALYZE`
