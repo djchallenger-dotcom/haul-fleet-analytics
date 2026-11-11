@@ -20,7 +20,7 @@ import psycopg
 # SETTINGS
 # =============================================================================
 SETTINGS = {
-    "db": "host=localhost port=5432 dbname=haul_fleet user=fleet password=fleet",
+    "db": "host=localhost port=55432 dbname=haul_fleet user=fleet password=fleet",
     "seed": 42,
     "start_date": date(2026, 1, 1),
     "end_date": date(2026, 6, 30),        # inclusive
