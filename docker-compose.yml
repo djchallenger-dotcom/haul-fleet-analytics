@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: fleet       # local demo only
       POSTGRES_DB: haul_fleet
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       # Every .sql file in this folder runs automatically, in name order,
       # the first time the container starts with an empty data volume.
