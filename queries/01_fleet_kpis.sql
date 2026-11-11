@@ -43,5 +43,52 @@ SELECT
 FROM haul_cycle hc
 INNER JOIN shift sh ON hc.shift_id = sh.shift_id
 GROUP BY sh.shift_type
-ORDER BY sh.shift_type
-;
+ORDER BY sh.shift_type;
+
+
+/*
+Q3: What was each haul truck's physical availability?
+Physical availability = (calendar hours - maintenance hours) / calendar hours.
+Only planned and unplanned maintenance count as downtime. Operational
+delays and standby don't, because the truck was mechanically ready.
+The reporting window runs from the first shift start to the last shift
+end. Each downtime event is clipped to that window: events still open
+(end_ts NULL) run to the window end, and events crossing either boundary
+only count the hours inside it. Events entirely outside are excluded.
+Finding: availability ranges from 86.7% (HT-207) to 92.5% (HT-208).
+ */
+
+WITH period AS (
+    SELECT
+        MIN(start_ts) AS period_start,
+        MAX(end_ts)   AS period_end,
+        EXTRACT(EPOCH FROM (MAX(end_ts) - MIN(start_ts))) / 3600 AS calendar_hours
+    FROM shift
+),
+maintenance AS (
+    SELECT
+        dte.equipment_id,
+        SUM(EXTRACT(EPOCH FROM (
+            LEAST(COALESCE(dte.end_ts, p.period_end), p.period_end)
+                - GREATEST(dte.start_ts, p.period_start)
+           )) / 3600) AS downtime_hours
+    FROM downtime_event dte
+    CROSS JOIN period p
+    WHERE dte.category IN ('planned_maintenance', 'unplanned_maintenance')
+      AND dte.start_ts < p.period_end
+      AND COALESCE(dte.end_ts, p.period_end) > p.period_start
+    GROUP BY dte.equipment_id
+)
+
+SELECT 
+    eq.equipment_id,
+    eq.unit_number,
+    ROUND(p.calendar_hours, 0) AS calendar_hours,
+    ROUND(COALESCE(m.downtime_hours, 0), 1) AS downtime_hours,
+    COALESCE(ROUND((p.calendar_hours - m.downtime_hours) / p.calendar_hours * 100, 1), 100) AS availability
+FROM equipment eq
+INNER JOIN equipment_model em ON eq.model_id = em.model_id
+LEFT JOIN maintenance m ON eq.equipment_id = m.equipment_id
+CROSS JOIN period p
+WHERE em.equipment_type = 'haul_truck'
+ORDER BY availability;
