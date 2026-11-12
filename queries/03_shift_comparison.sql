@@ -55,3 +55,67 @@ SELECT
 FROM operator op
 INNER JOIN operator_scores opsc ON op.operator_id = opsc.operator_id
 ORDER BY rank;
+
+
+/*
+Q2: How do the four crews compare, and how consistent is each crew
+from shift to shift?
+Two levels of aggregation: each shift is summarized first (total
+tonnes, performance index as in Q1), then shifts are summarized by crew.
+Finding: day crews A and C move ~103,500 t per shift; night crews
+move less, as expected. But crews B and D work identical night
+conditions, yet D moves ~3,300 t more per shift (97,400 vs 94,100)
+because its operators cycle faster (index 1.016 vs 1.038). D's index
+also beats both day crews.
+All crews are equally consistent: the index varies by under 1% from
+shift to shift, while tonnes vary ~6-7% (tonnes_cv_pct). Those swings
+come from how many trucks are down in a given shift, not from the
+crew's speed.
+ */
+
+WITH cycles AS (    
+    SELECT 
+        hc.shift_id,
+        sh.shift_type,
+        sh.crew,
+        hc.load_location_id,
+        hc.dump_location_id,
+        hc.payload_tonnes,
+        EXTRACT(EPOCH FROM (hc.cycle_end_ts - hc.arrive_shovel_ts)) / 60 AS cycle_minutes
+    FROM haul_cycle hc
+    INNER JOIN shift sh ON hc.shift_id = sh.shift_id
+),
+medians AS (
+    SELECT
+        shift_type,
+        load_location_id,
+        dump_location_id,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cycle_minutes) AS median_minutes
+    FROM cycles
+    GROUP BY shift_type, load_location_id, dump_location_id
+),
+shift_scores AS (
+    SELECT
+        c.crew,
+        c.shift_type,
+        SUM(c.payload_tonnes) AS total_tonnes,
+        AVG(c.cycle_minutes/m.median_minutes) AS performance_index
+    FROM cycles c
+    INNER JOIN medians m ON c.load_location_id = m.load_location_id
+                       AND c.dump_location_id = m.dump_location_id
+                       AND c.shift_type = m.shift_type
+    GROUP BY c.shift_id, c.crew, c.shift_type
+)
+
+SELECT
+    sc.crew,
+    sc.shift_type,
+    COUNT(*) AS shifts_worked,
+    ROUND(AVG(sc.total_tonnes), 0) AS avg_tonnes,
+    ROUND(STDDEV(sc.total_tonnes), 0) AS stddev_tonnes,
+    ROUND(AVG(sc.performance_index)::NUMERIC, 3) AS avg_index,
+    ROUND(STDDEV(sc.performance_index)::NUMERIC, 3) AS stddev_index,
+    ROUND(100 * STDDEV(sc.total_tonnes) / AVG(sc.total_tonnes), 1) AS tonnes_cv_pct  -- coefficient of variation
+FROM shift_scores sc
+GROUP BY sc.crew, sc.shift_type
+ORDER BY sc.crew;
