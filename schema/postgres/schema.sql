@@ -119,6 +119,11 @@ CREATE TABLE haul_cycle (
 ) PARTITION BY RANGE (load_start_ts);
 
 -- Monthly partitions for Jan-Jun 2026, plus a default for anything outside.
+-- Boundaries are midnight mine-local time (America/Phoenix), so each
+-- partition matches a reporting month. Plain dates would be interpreted in
+-- the session time zone (UTC in the container), putting every boundary at
+-- 5 PM local and splitting the last evening of each month into the next
+-- partition.
 DO $$
 DECLARE
     m date;
@@ -128,7 +133,9 @@ BEGIN
         EXECUTE format(
             'CREATE TABLE haul_cycle_%s PARTITION OF haul_cycle
                  FOR VALUES FROM (%L) TO (%L)',
-            to_char(m, 'YYYY_MM'), m, (m + interval '1 month')::date);
+            to_char(m, 'YYYY_MM'),
+            m::timestamp AT TIME ZONE 'America/Phoenix',
+            (m + interval '1 month')::timestamp AT TIME ZONE 'America/Phoenix');
     END LOOP;
 END $$;
 
