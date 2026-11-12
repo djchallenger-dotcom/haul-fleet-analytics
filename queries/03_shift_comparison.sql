@@ -119,3 +119,75 @@ SELECT
 FROM shift_scores sc
 GROUP BY sc.crew, sc.shift_type
 ORDER BY sc.crew;
+
+
+
+/*
+Q3: Do more experienced operators perform better?
+Reuses the Q1 performance index (lower = faster). Experience is whole
+years of service as of 2026-01-01. Operators are grouped into
+experience bands, and CORR() measures the overall relationship
+across all 88 operators, calculated once in a scalar subquery that
+reads the same CTE as the bands.
+Finding: no meaningful relationship. Band averages move up and down
+with no steady trend (1.036, 1.027, 1.034, 1.023), and the
+correlation is -0.09, close to zero. In this data, tenure does not
+predict cycle speed, so it would be a poor basis for assignments or
+training priorities.
+Note: operator skill in the synthetic data is assigned at random,
+independent of hire date, which is consistent with this result.
+*/
+
+WITH cycles AS (    
+    SELECT 
+        hc.operator_id,
+        sh.shift_type,
+        hc.load_location_id,
+        hc.dump_location_id,
+        EXTRACT(EPOCH FROM (hc.cycle_end_ts - hc.arrive_shovel_ts)) / 60 AS cycle_minutes
+    FROM haul_cycle hc
+    INNER JOIN shift sh ON hc.shift_id = sh.shift_id
+),
+medians AS (
+    SELECT
+        shift_type,
+        load_location_id,
+        dump_location_id,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cycle_minutes) AS median_minutes
+    FROM cycles
+    GROUP BY shift_type, load_location_id, dump_location_id
+),
+operator_scores AS (
+    SELECT 
+        c.operator_id,
+        COUNT(*) AS cycles,
+        AVG(c.cycle_minutes / m.median_minutes) AS performance_index
+    FROM cycles c
+    INNER JOIN medians m ON c.load_location_id = m.load_location_id
+                       AND c.dump_location_id = m.dump_location_id
+                       AND c.shift_type = m.shift_type
+    GROUP BY c.operator_id
+),
+operator_experience AS (
+    SELECT
+        os.operator_id,
+        os.performance_index,
+        EXTRACT(YEAR FROM age(DATE '2026-01-01', op.hire_date)) AS years_experience
+    FROM operator_scores os
+    INNER JOIN operator op ON os.operator_id = op.operator_id
+)
+
+SELECT
+    CASE
+        WHEN years_experience <= 2  THEN '0-2 years'
+        WHEN years_experience <= 7  THEN '3-7 years'
+        WHEN years_experience <= 12 THEN '8-12 years'
+        ELSE '13+ years'
+    END AS experience_group,
+    COUNT(*) AS operators,
+    ROUND(AVG(performance_index)::numeric, 3) AS avg_index,
+    (SELECT ROUND(CORR(performance_index, years_experience)::numeric, 3)
+     FROM operator_experience) AS overall_correlation
+FROM operator_experience
+GROUP BY experience_group
+ORDER BY MIN(years_experience);
