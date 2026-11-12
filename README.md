@@ -16,6 +16,8 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 - **Operator technique matters far more than the truck.** After normalizing each cycle against the median for its route and shift type, operator speed varies by about 16% from fastest to slowest, compared with about 1% between trucks of the same model. Experience does not explain it: the correlation between years of service and speed is close to zero.
 - **Crew D outworks crew B under identical night conditions,** moving about 3,300 more tonnes per shift because its operators cycle about 2% faster. Each crew's speed is very consistent from shift to shift; the 6 to 7% swings in tonnes per shift come from how many trucks are down, not from the crew.
 - **A few long stoppages cost more than all routine interruptions combined.** 95% of cycles start the moment the previous one ends. Only 1,243 gaps between cycles last over two hours, yet they account for about 60% of all time lost between cycles.
+- **Every multi-shift outage comes from an unplanned failure.** Of 80 stretches of idle truck shifts, 69 last a single shift; the 11 longer ones each trace to one unplanned maintenance event, the longest being a brake failure that took HT-106 out for five consecutive shifts. Planned maintenance never causes a multi-shift outage, so long outages are a reliability problem, not a scheduling one.
+- **Chassis accounts for 44% of unplanned downtime, and the Engine hides in plain sight.** Rolling failures up the component tree shows Chassis as the costliest system, driven by tires, the worst single part. The Engine's three parts each look unremarkable, but together they nearly match tires, which a part-level report would miss.
 
 ## What this project demonstrates
 
@@ -34,6 +36,10 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 | Fair comparison by normalizing against group medians; `RANK` and `NTILE` quartiles | `queries/03_shift_comparison.sql` (Q1) |
 | Two-level aggregation (per shift, then per crew) with `STDDEV` and coefficient of variation | `queries/03_shift_comparison.sql` (Q2) |
 | `CORR` in an uncorrelated scalar subquery reading the same CTE as the main query | `queries/03_shift_comparison.sql` (Q3) |
+| Anti-join with `NOT EXISTS`, gaps-and-islands with `ROW_NUMBER`, and `HAVING` | `queries/04_downtime_gaps.sql` (Q1) |
+| Time-range overlap joins, `STRING_AGG`, and `COUNT(column)` vs `COUNT(*)` with LEFT JOINs | `queries/04_downtime_gaps.sql` (Q2) |
+| Recursive CTE walking a self-referencing hierarchy | `queries/05_maintenance_tree.sql` (Q1) |
+| Recursive ancestor/descendant pairs to roll up totals through a tree | `queries/05_maintenance_tree.sql` (Q2) |
 | Reproducible synthetic data, bulk-loaded with `COPY` | `data/generate.py` |
 
 ## Data model
@@ -94,7 +100,9 @@ haul-fleet-analytics/
 ├── queries/
 │   ├── 01_fleet_kpis.sql          Tonnes, cycle stages, availability, productivity
 │   ├── 02_cycle_time_analysis.sql Route percentiles, gaps between cycles, outliers
-│   └── 03_shift_comparison.sql    Operator ranking, crew comparison, experience
+│   ├── 03_shift_comparison.sql    Operator ranking, crew comparison, experience
+│   ├── 04_downtime_gaps.sql       Consecutive idle shifts and their causes
+│   └── 05_maintenance_tree.sql    Component hierarchy and failure roll-up
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -105,7 +113,7 @@ haul-fleet-analytics/
 - [x] Fleet KPIs: tonnes, cycle breakdown, availability, productivity
 - [x] Cycle time analysis: percentiles, gaps between cycles, outliers
 - [x] Shift and operator performance comparison
-- [ ] Downtime analysis: gaps and islands, recursive failure roll-up
+- [x] Downtime analysis: gaps and islands, recursive failure roll-up
 - [ ] Query performance tuning with `EXPLAIN ANALYZE`
 - [ ] Data quality checks (overloaded trucks, sensor glitches)
 - [ ] SQL Server (T-SQL) port and dialect notes
