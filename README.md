@@ -13,6 +13,8 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 - **Physical availability ranges from 86.7% to 92.5% across the fleet.** Downtime events are clipped to the reporting window, and events still open at period end are counted through the end of the window rather than silently dropped.
 - **Truck productivity is decided by model, not by individual truck.** Every 930E outranks every 793F (about 587 vs. 460 tonnes per operating hour, in line with their 290 t vs. 227 t payloads), while trucks of the same model fall within about 1% of each other.
 - **Short routes are the least predictable.** The shortest haul has a 90th-percentile cycle time 1.24 times its median, against 1.17 for the long crusher haul. Shovel queue time varies by about the same amount on every route, so it makes up a larger share of short cycles; better dispatching would pay off most on the short waste routes.
+- **Operator technique matters far more than the truck.** After normalizing each cycle against the median for its route and shift type, operator speed varies by about 16% from fastest to slowest, compared with about 1% between trucks of the same model. Experience does not explain it: the correlation between years of service and speed is close to zero.
+- **Crew D outworks crew B under identical night conditions,** moving about 3,300 more tonnes per shift because its operators cycle about 2% faster. Each crew's speed is very consistent from shift to shift; the 6 to 7% swings in tonnes per shift come from how many trucks are down, not from the crew.
 - **A few long stoppages cost more than all routine interruptions combined.** 95% of cycles start the moment the previous one ends. Only 1,243 gaps between cycles last over two hours, yet they account for about 60% of all time lost between cycles.
 
 ## What this project demonstrates
@@ -29,6 +31,9 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 | Percentiles with `PERCENTILE_CONT ... WITHIN GROUP` and joining the same table twice | `queries/02_cycle_time_analysis.sql` (Q1) |
 | `LAG` to measure gaps between consecutive rows, bucketed with `CASE` | `queries/02_cycle_time_analysis.sql` (Q2) |
 | Outlier detection against a per-group median (aggregate CTE joined back to detail rows) | `queries/02_cycle_time_analysis.sql` (Q3) |
+| Fair comparison by normalizing against group medians; `RANK` and `NTILE` quartiles | `queries/03_shift_comparison.sql` (Q1) |
+| Two-level aggregation (per shift, then per crew) with `STDDEV` and coefficient of variation | `queries/03_shift_comparison.sql` (Q2) |
+| `CORR` in an uncorrelated scalar subquery reading the same CTE as the main query | `queries/03_shift_comparison.sql` (Q3) |
 | Reproducible synthetic data, bulk-loaded with `COPY` | `data/generate.py` |
 
 ## Data model
@@ -88,7 +93,8 @@ haul-fleet-analytics/
 ├── data/generate.py               Seeded synthetic data generator
 ├── queries/
 │   ├── 01_fleet_kpis.sql          Tonnes, cycle stages, availability, productivity
-│   └── 02_cycle_time_analysis.sql Route percentiles, gaps between cycles, outliers
+│   ├── 02_cycle_time_analysis.sql Route percentiles, gaps between cycles, outliers
+│   └── 03_shift_comparison.sql    Operator ranking, crew comparison, experience
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -98,7 +104,7 @@ haul-fleet-analytics/
 - [x] Schema, data generator, and Docker setup
 - [x] Fleet KPIs: tonnes, cycle breakdown, availability, productivity
 - [x] Cycle time analysis: percentiles, gaps between cycles, outliers
-- [ ] Shift and operator performance comparison
+- [x] Shift and operator performance comparison
 - [ ] Downtime analysis: gaps and islands, recursive failure roll-up
 - [ ] Query performance tuning with `EXPLAIN ANALYZE`
 - [ ] Data quality checks (overloaded trucks, sensor glitches)
