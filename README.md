@@ -19,6 +19,14 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 - **Every multi-shift outage comes from an unplanned failure.** Of 80 stretches of idle truck shifts, 69 last a single shift; the 11 longer ones each trace to one unplanned maintenance event, the longest being a brake failure that took HT-106 out for five consecutive shifts. Planned maintenance never causes a multi-shift outage, so long outages are a reliability problem, not a scheduling one.
 - **Chassis accounts for 44% of unplanned downtime, and the Engine hides in plain sight.** Rolling failures up the component tree shows Chassis as the costliest system, driven by tires, the worst single part. The Engine's three parts each look unremarkable, but together they nearly match tires, which a part-level report would miss.
 
+## Performance tuning
+
+Three measured exercises, each with a reproducible script and a write-up in `performance/tuning_notes.md`:
+
+- **An index on a frequent filter column** cut pages read by 95% (2,348 to 114) and execution time from 11.2 to 1.7 ms, at a cost of about 1.2 MB of index storage.
+- **Reading the query plan exposed a schema bug.** Monthly partitions had been created on UTC boundaries, so a query for one mine-local month scanned two partitions. Redefining the boundaries in mine time let a monthly query read a single partition, a sixth of the pages needed when filtering on a non-partition column.
+- **A query rewrite beat a composite index.** The index cut pages read by 93% but time by only 20%, because most of the time went into hashing 150,000 rows. Rewriting the anti-join against a table with one row per truck shift made it about 11 times faster with no new index, so the index was not kept.
+
 ## What this project demonstrates
 
 | Area | Where |
@@ -40,6 +48,8 @@ All data is synthetic, produced by a seeded Python generator, so results are ful
 | Time-range overlap joins, `STRING_AGG`, and `COUNT(column)` vs `COUNT(*)` with LEFT JOINs | `queries/04_downtime_gaps.sql` (Q2) |
 | Recursive CTE walking a self-referencing hierarchy | `queries/05_maintenance_tree.sql` (Q1) |
 | Recursive ancestor/descendant pairs to roll up totals through a tree | `queries/05_maintenance_tree.sql` (Q2) |
+| Reading `EXPLAIN (ANALYZE, BUFFERS)`: seq vs. bitmap vs. index-only scans, partition pruning, hash joins | `performance/` |
+| Judging trade-offs: index storage and write cost, CPU-bound vs. I/O-bound plans, rewrites vs. indexes | `performance/tuning_notes.md` |
 | Reproducible synthetic data, bulk-loaded with `COPY` | `data/generate.py` |
 
 ## Data model
@@ -61,7 +71,7 @@ erDiagram
     location ||--o{ fuel_event : "at"
 ```
 
-The central table is `haul_cycle`, one row per truck trip, with timestamps for each stage: arrive at shovel, load start, load end, dump start, dump end, and return to shovel. It holds about 150,000 rows and is partitioned by month. `component` is a self-referencing hierarchy (truck > chassis > tires) used to roll failures up to the system level.
+The central table is `haul_cycle`, one row per truck trip, with timestamps for each stage: arrive at shovel, load start, load end, dump start, dump end, and return to shovel. It holds about 150,000 rows and is partitioned by month, with partition boundaries at midnight mine-local time so each partition matches a reporting month. `component` is a self-referencing hierarchy (truck > chassis > tires) used to roll failures up to the system level.
 
 All timestamps are stored as `timestamptz`. The mine runs on Arizona time (MST, UTC-7, no daylight saving), and reporting queries bucket dates in that zone.
 
@@ -103,6 +113,11 @@ haul-fleet-analytics/
 │   ├── 03_shift_comparison.sql    Operator ranking, crew comparison, experience
 │   ├── 04_downtime_gaps.sql       Consecutive idle shifts and their causes
 │   └── 05_maintenance_tree.sql    Component hierarchy and failure roll-up
+├── performance/
+│   ├── 01_operator_index.sql      Missing index on a filter column
+│   ├── 02_partition_pruning.sql   Partition key filters and boundary fix
+│   ├── 03_composite_index.sql     Composite index vs. query rewrite
+│   └── tuning_notes.md            Measurements, analysis, and decisions
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -114,7 +129,7 @@ haul-fleet-analytics/
 - [x] Cycle time analysis: percentiles, gaps between cycles, outliers
 - [x] Shift and operator performance comparison
 - [x] Downtime analysis: gaps and islands, recursive failure roll-up
-- [ ] Query performance tuning with `EXPLAIN ANALYZE`
+- [x] Query performance tuning with `EXPLAIN ANALYZE`
 - [ ] Data quality checks (overloaded trucks, sensor glitches)
 - [ ] SQL Server (T-SQL) port and dialect notes
 
