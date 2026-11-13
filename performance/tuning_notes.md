@@ -90,7 +90,7 @@ WHERE load_start_ts >= '2026-03-01 00:00-07' AND load_start_ts < '2026-04-01 00:
 | Rows hashed | 150,584 | 150,584 | 7,144 |
 | Hash table memory | 7,931 kB | 7,931 kB | 344 kB |
 | Buffers (8 kB pages) | 2,355 | 168 | 58 |
-| Execution time | 45.0 ms | 35.9 ms | ~4 ms |
+| Execution time | 45.0 ms | 35.9 ms | 4.2 ms |
 | Result rows | 96 | 96 | 96 |
 
 **Why the index helped less than expected.** The index cut pages read by 93%, but time by only 20%. Splitting the plan's timings shows why: reading the rows fell from 21.3 ms to 16.1 ms, while building the hash table stayed at about 17 to 19 ms either way. Every one of the 150,584 rows still had to be produced and hashed, and that CPU work is untouched by an index. With the table already in memory, reading pages was never the bottleneck.
@@ -108,7 +108,7 @@ WHERE load_start_ts >= '2026-03-01 00:00-07' AND load_start_ts < '2026-04-01 00:
 
 **Query:** the "Cycle overlaps truck downtime" check in `quality/checks.sql`
 
-**Scenario.** The data quality scorecard ran nine checks; eight finished almost instantly, but the whole query took about 17 seconds. The slow check confirms that no haul cycle overlaps a recorded downtime event for the same truck, using `EXISTS` inside `COUNT(*) FILTER (WHERE ...)`.
+**Scenario.** The data quality scorecard ran nine checks; eight finished almost instantly, but the whole query took about 16 seconds. The slow check confirms that no haul cycle overlaps a recorded downtime event for the same truck, using `EXISTS` inside `COUNT(*) FILTER (WHERE ...)`.
 
 **Diagnosis.** Inside a `FILTER`, PostgreSQL cannot turn the `EXISTS` into a join, so the plan runs it as a subplan once for each of the ~150,000 cycles. `downtime_event` had no ordinary index on `equipment_id`, so each run scanned all ~2,600 downtime events: roughly 390 million row comparisons.
 
@@ -120,7 +120,7 @@ WHERE load_start_ts >= '2026-03-01 00:00-07' AND load_start_ts < '2026-04-01 00:
 | | Original | Range rewrite (existing GiST index) | B-tree index |
 |---|---|---|---|
 | Lookup per cycle | Seq Scan of all downtime events | Index Scan on the exclusion-constraint index | Index Scan on the new index |
-| Execution time | ~16.7 s | ~2.9 s | ~1.1 s |
+| Execution time (check alone) | 14.9 s | 2.0 s | 1.1 s |
 
 **Decision.** The B-tree index is kept and added to `schema/postgres/schema.sql`. It was the fastest fix, costs little on a table of ~2,600 rows, and serves a core access pattern: looking up a truck's downtime by time also drives the availability query and the idle-stretch causes. The range version was slower because building range values for every comparison costs CPU, but it shows that a constraint's index can do double duty.
 
