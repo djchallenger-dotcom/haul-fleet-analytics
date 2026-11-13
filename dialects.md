@@ -85,7 +85,7 @@ The same rule breaks ages and tenure: `DATEDIFF(year, '2015-12-31', '2026-01-01'
 
 **Batches.** `CREATE TRIGGER` must be the only statement in its batch, so the schema script uses `GO` separators. `GO` is a client command, not SQL; the server never sees it.
 
-**Text types.** `varchar` stores single-byte characters and `nvarchar` stores Unicode. The schema uses `nvarchar` throughout except `shift_type`, whose values are fixed ASCII codes.
+**Text types.** `varchar` stores single-byte characters and `nvarchar` stores Unicode. The schema uses `nvarchar` throughout, so names with accented or non-Latin characters would be stored correctly.
 
 ## Loading the data
 
