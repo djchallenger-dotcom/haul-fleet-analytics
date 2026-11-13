@@ -14,13 +14,17 @@ Changes from PostgreSQL:
   cycle row with OVER (PARTITION BY route), then rows are grouped by
   route. The percentile is identical on every row of a route, so MAX()
   simply returns it.
+- Cycle minutes use DATEDIFF_BIG(microsecond, ...) / 60000000.0.
+  DATEDIFF counts unit boundaries crossed, so DATEDIFF(second, ...)
+  would drop fractions of a second from microsecond timestamps.
+  DATEDIFF_BIG is needed because DATEDIFF returns an int, which
+  overflows for durations over about 35.8 minutes in microseconds.
 - AVG of an integer returns an integer in SQL Server (PostgreSQL
-  returns a decimal), so cycle minutes are made decimal before
-  averaging: DATEDIFF(second, ...) / 60.0.
+  returns a decimal); dividing by a decimal literal makes cycle
+  minutes decimal before they are averaged.
 - PERCENTILE_CONT returns float, which ROUND accepts directly; no cast
-  is needed. Float arithmetic can differ from PostgreSQL in the last
-  decimal place.
-Results match the PostgreSQL version to two decimal places.
+  is needed.
+Results match the PostgreSQL version.
 */
 
 WITH cycles AS (
