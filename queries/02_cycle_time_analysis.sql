@@ -1,4 +1,10 @@
 /*
+02_cycle_time_analysis.sql
+Cycle time distributions by route, gaps between a truck's consecutive
+cycles, and outlier cycles measured against their route's median.
+*/
+
+/*
 Q1: How long are typical and slow cycles on each haul route, and
 which routes are least predictable?
 A route is a load location / dump location pair. Median and p90
@@ -151,4 +157,3 @@ INNER JOIN haul_cycle hc
     AND hc.dump_location_id = rm.dump_location_id
 GROUP BY rm.load_location, rm.dump_location, rm.cycle_count, rm.median_minutes
 ORDER BY outlier_count DESC;
-
