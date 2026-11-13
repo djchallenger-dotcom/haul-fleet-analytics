@@ -26,7 +26,7 @@ day and night shift?
 Each stage is the gap between consecutive cycle timestamps
 (queue -> load -> loaded haul -> dump -> empty return); the five
 stages sum to the total cycle time.
-Finding: night cycles average X min longer than day (Y vs Z min).
+Finding: night cycles average 2.2 min longer than day (29.3 vs 27.1 min).
 The gap comes from queue, loaded haul, and empty return; load and
 dump times are flat because they depend on the shovel and truck
 body, not the operator or visibility.
@@ -44,6 +44,7 @@ FROM haul_cycle hc
 INNER JOIN shift sh ON hc.shift_id = sh.shift_id
 GROUP BY sh.shift_type
 ORDER BY sh.shift_type;
+
 
 
 /*
