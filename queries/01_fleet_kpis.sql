@@ -1,4 +1,10 @@
 /*
+01_fleet_kpis.sql
+Headline fleet KPIs: monthly tonnes by material, where cycle time goes,
+physical availability per truck, and truck productivity rankings.
+*/
+
+/*
 Q1: How many tonnes of ore and waste did the fleet move each month?
 Tonnes count when the truck finishes dumping (dump_end_ts).
 Months are bucketed in mine-local time (America/Phoenix, UTC-7,
