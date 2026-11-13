@@ -27,7 +27,7 @@ WITH cycles AS (
     SELECT
         hc.load_location_id,
         hc.dump_location_id,
-        DATEDIFF(second, hc.arrive_shovel_ts, hc.cycle_end_ts) / 60.0 AS cycle_minutes
+        DATEDIFF_BIG(microsecond, hc.arrive_shovel_ts, hc.cycle_end_ts) / 60000000.0 AS cycle_minutes
     FROM haul_cycle hc
 ),
 cycles_with_percentiles AS (
