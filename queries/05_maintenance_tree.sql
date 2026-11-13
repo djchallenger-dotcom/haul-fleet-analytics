@@ -1,4 +1,10 @@
 /*
+05_maintenance_tree.sql
+The truck component hierarchy, and unplanned failures rolled up from
+individual parts to the systems above them, using recursive CTEs.
+*/
+
+/*
 Q1: What does the truck component hierarchy look like?
 component is a self-referencing table (parent_component_id points to
 another component). A recursive CTE walks it from the root down: the

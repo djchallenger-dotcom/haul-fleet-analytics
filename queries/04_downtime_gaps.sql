@@ -1,4 +1,10 @@
 /*
+04_downtime_gaps.sql
+Stretches of consecutive idle shifts per truck (gaps and islands), and
+the downtime events that caused each one.
+*/
+
+/*
 Q1: When was each truck out of production for consecutive shifts,
 and which stretches were longest?
 An idle shift is a truck/shift pair with no haul cycles, found with an

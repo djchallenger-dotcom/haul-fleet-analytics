@@ -1,4 +1,11 @@
 /*
+03_shift_comparison.sql
+Operator and crew performance, compared fairly: cycles are normalized
+against the median for their route and shift type, so operators and
+crews on different routes and shifts can be ranked on equal terms.
+*/
+
+/*
 Q1: Which operators are fastest, compared fairly?
 Each cycle is divided by the median cycle time for its route and
 shift type, then averaged per operator (1.00 = typical; lower is
