@@ -39,7 +39,7 @@ operator_scores AS (
         AVG(c.cycle_minutes / m.median_minutes) AS performance_index
     FROM cycles c
     INNER JOIN medians m ON c.load_location_id = m.load_location_id
-                       AND c.dump_location_Id = m.dump_location_id
+                       AND c.dump_location_id = m.dump_location_id
                        AND c.shift_type = m.shift_type
     GROUP BY c.operator_id
 )
@@ -55,6 +55,7 @@ SELECT
 FROM operator op
 INNER JOIN operator_scores opsc ON op.operator_id = opsc.operator_id
 ORDER BY rank;
+
 
 
 /*
@@ -138,8 +139,8 @@ Note: operator skill in the synthetic data is assigned at random,
 independent of hire date, which is consistent with this result.
 */
 
-WITH cycles AS (    
-    SELECT 
+WITH cycles AS (
+    SELECT
         hc.operator_id,
         sh.shift_type,
         hc.load_location_id,
@@ -158,7 +159,7 @@ medians AS (
     GROUP BY shift_type, load_location_id, dump_location_id
 ),
 operator_scores AS (
-    SELECT 
+    SELECT
         c.operator_id,
         COUNT(*) AS cycles,
         AVG(c.cycle_minutes / m.median_minutes) AS performance_index
