@@ -30,7 +30,7 @@ Measured exercises, each with a reproducible script and a write-up in `performan
 - **An index on a frequent filter column** cut pages read by 95% (2,348 to 114) and execution time from 11.2 to 1.7 ms, at a cost of about 1.2 MB of index storage.
 - **Reading the query plan exposed a schema bug.** Monthly partitions had been created on UTC boundaries, so a query for one mine-local month scanned two partitions. Redefining the boundaries in mine time let a monthly query read a single partition, a sixth of the pages needed when filtering on a non-partition column.
 - **A query rewrite beat a composite index.** The index cut pages read by 93% but time by only 20%, because most of the time went into hashing 150,000 rows. Rewriting the anti-join against a table with one row per truck shift made it about 11 times faster with no new index, so the index was not kept.
-- **A slow data quality check led to an index that was kept.** One check ran a downtime lookup for each of 150,000 cycles with no usable index, taking about 17 seconds. An index on downtime by truck and start time brought it to about 1 second, and it supports the availability and outage queries too.
+- **A slow data quality check led to an index that was kept.** One check ran a downtime lookup for each of 150,000 cycles with no usable index, taking about 15 seconds. An index on downtime by truck and start time brought it to about 1 second, and it supports the availability and outage queries too.
 
 ## Data quality
 
