@@ -9,6 +9,12 @@ findings. Dialect differences are summarized in dialects.md.
 /*
 Q3: Do more experienced operators perform better? (T-SQL port)
 Changes from PostgreSQL:
+- Cycle minutes use DATEDIFF_BIG(microsecond, ...) / 60000000.0.
+  DATEDIFF counts unit boundaries crossed, so DATEDIFF(second, ...)
+  drops fractions of a second; with microsecond timestamps, that was
+  enough to change one band's average in the fourth decimal place.
+  DATEDIFF_BIG is needed because DATEDIFF returns an int, which
+  overflows for durations over about 35.8 minutes in microseconds.
 - Medians use PERCENTILE_CONT as a window function (the only form SQL
   Server supports), with SELECT DISTINCT keeping one row per route and
   shift type.
@@ -22,12 +28,7 @@ Changes from PostgreSQL:
   definition: (AVG(xy) - AVG(x) * AVG(y)) / (STDEVP(x) * STDEVP(y)).
   Years are cast to float first, because AVG of an integer returns an
   integer in SQL Server.
-Results match the PostgreSQL version, except that the 0-2 year band's
-average index shows 1.035 instead of 1.036. Its true value is about
-1.0355, right on the rounding boundary, and the two databases calculate
-with slightly different precision: DATEDIFF / 60.0 produces a decimal
-with a fixed number of places, and float values round differently.
-At six decimal places the results agree to within rounding error.
+Results match the PostgreSQL version exactly, to six decimal places.
 */
 
 WITH cycles AS (
@@ -36,7 +37,7 @@ WITH cycles AS (
         sh.shift_type,
         hc.load_location_id,
         hc.dump_location_id,
-        DATEDIFF(second, hc.arrive_shovel_ts, hc.cycle_end_ts) / 60.0 AS cycle_minutes
+        DATEDIFF_BIG(microsecond, hc.arrive_shovel_ts, hc.cycle_end_ts) / 60000000.0 AS cycle_minutes
     FROM haul_cycle hc
     INNER JOIN shift sh ON hc.shift_id = sh.shift_id
 ),
