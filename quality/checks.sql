@@ -29,10 +29,10 @@ Findings:
 - All consistency checks pass with zero failures.
 Performance: the downtime check runs an EXISTS lookup for each of the
 ~150,000 cycles. Without an index it scanned every downtime event per
-cycle (about 17 seconds); the index on downtime_event (equipment_id,
+cycle (about 15 seconds); the index on downtime_event (equipment_id,
 start_ts) in schema.sql brings it to about 1 second. Writing the overlap
 as tstzrange(...) && tstzrange(...) would instead use the index behind
-the exclusion constraint, with no new index, at about 3 seconds.
+the exclusion constraint, with no new index, at about 2 seconds.
 See performance/tuning_notes.md, Exercise 4.
 */
 
