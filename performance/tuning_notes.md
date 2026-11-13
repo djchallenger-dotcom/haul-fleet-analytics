@@ -103,3 +103,26 @@ WHERE load_start_ts >= '2026-03-01 00:00-07' AND load_start_ts < '2026-04-01 00:
 - **`04_downtime_gaps.sql` keeps the original query.** `haul_cycle` is the source of truth for whether a truck worked a shift, and the query states that directly. `operator_assignment` matches it in this data, but only because of how assignments are recorded; if that ever changed, the rewrite would silently return wrong results. The rewrite is documented here as the faster option, valid as long as the equivalence check passes.
 
 **Takeaway.** Before adding an index, check where a query's time actually goes. When a query needs one fact per group, a table that already stores one row per group usually beats any index on the detail table.
+
+## Exercise 4: A slow data quality check
+
+**Query:** the "Cycle overlaps truck downtime" check in `quality/checks.sql`
+
+**Scenario.** The data quality scorecard ran nine checks; eight finished almost instantly, but the whole query took about 17 seconds. The slow check confirms that no haul cycle overlaps a recorded downtime event for the same truck, using `EXISTS` inside `COUNT(*) FILTER (WHERE ...)`.
+
+**Diagnosis.** Inside a `FILTER`, PostgreSQL cannot turn the `EXISTS` into a join, so the plan runs it as a subplan once for each of the ~150,000 cycles. `downtime_event` had no ordinary index on `equipment_id`, so each run scanned all ~2,600 downtime events: roughly 390 million row comparisons.
+
+**Two fixes measured:**
+
+- **A B-tree index on `downtime_event (equipment_id, start_ts)`.** Each lookup jumps straight to the right truck's events.
+- **Rewriting the overlap as a range comparison,** `tstzrange(d.start_ts, d.end_ts) && tstzrange(...)`. This lets PostgreSQL use the GiST index that already exists behind the exclusion constraint on `downtime_event`, so no new index is needed.
+
+| | Original | Range rewrite (existing GiST index) | B-tree index |
+|---|---|---|---|
+| Lookup per cycle | Seq Scan of all downtime events | Index Scan on the exclusion-constraint index | Index Scan on the new index |
+| Execution time | ~16.7 s | ~2.9 s | ~1.1 s |
+
+**Decision.** The B-tree index is kept and added to `schema/postgres/schema.sql`. It was the fastest fix, costs little on a table of ~2,600 rows, and serves a core access pattern: looking up a truck's downtime by time also drives the availability query and the idle-stretch causes. The range version was slower because building range values for every comparison costs CPU, but it shows that a constraint's index can do double duty.
+
+**Takeaway.** Unlike Exercise 3, where an index was rejected, here the index pays off, because the cost was a per-row lookup with no usable access path rather than CPU spent on rows that had to be read anyway.
+
