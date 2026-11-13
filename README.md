@@ -27,6 +27,14 @@ Three measured exercises, each with a reproducible script and a write-up in `per
 - **Reading the query plan exposed a schema bug.** Monthly partitions had been created on UTC boundaries, so a query for one mine-local month scanned two partitions. Redefining the boundaries in mine time let a monthly query read a single partition, a sixth of the pages needed when filtering on a non-partition column.
 - **A query rewrite beat a composite index.** The index cut pages read by 93% but time by only 20%, because most of the time went into hashing 150,000 rows. Rewriting the anti-join against a table with one row per truck shift made it about 11 times faster with no new index, so the index was not kept.
 
+## Data quality
+
+`quality/checks.sql` runs nine checks as a single scorecard, one row per check with PASS or FAIL. Payload checks follow the 10/10/20 haulage policy: no load over 120% of truck capacity, and no more than 10% of loads over 110%.
+
+- **286 payload readings (0.19%) are under 10% of truck capacity,** the signature of payload sensor glitches. They should be excluded or corrected before any payload reporting.
+- **Payloads comply with policy.** 0.73% of loads exceed 110% of capacity, well within the 10% allowance, and none exceed 120%.
+- **All consistency checks pass:** every cycle falls within its shift, uses the right equipment types and crew, sends material to a valid destination, and never overlaps recorded downtime.
+
 ## What this project demonstrates
 
 | Area | Where |
@@ -50,6 +58,9 @@ Three measured exercises, each with a reproducible script and a write-up in `per
 | Recursive ancestor/descendant pairs to roll up totals through a tree | `queries/05_maintenance_tree.sql` (Q2) |
 | Reading `EXPLAIN (ANALYZE, BUFFERS)`: seq vs. bitmap vs. index-only scans, partition pruning, hash joins | `performance/` |
 | Judging trade-offs: index storage and write cost, CPU-bound vs. I/O-bound plans, rewrites vs. indexes | `performance/tuning_notes.md` |
+| Data quality scorecard: `UNION ALL` of checks with per-check pass thresholds | `quality/checks.sql` |
+| Defensive validation: LEFT JOINs plus `IS DISTINCT FROM` so broken references fail checks instead of disappearing | `quality/checks.sql` |
+| Domain rules in SQL: the 10/10/20 payload policy | `quality/checks.sql` |
 | Reproducible synthetic data, bulk-loaded with `COPY` | `data/generate.py` |
 
 ## Data model
@@ -118,6 +129,8 @@ haul-fleet-analytics/
 │   ├── 02_partition_pruning.sql   Partition key filters and boundary fix
 │   ├── 03_composite_index.sql     Composite index vs. query rewrite
 │   └── tuning_notes.md            Measurements, analysis, and decisions
+├── quality/
+│   └── checks.sql                 Data quality scorecard
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -130,7 +143,7 @@ haul-fleet-analytics/
 - [x] Shift and operator performance comparison
 - [x] Downtime analysis: gaps and islands, recursive failure roll-up
 - [x] Query performance tuning with `EXPLAIN ANALYZE`
-- [ ] Data quality checks (overloaded trucks, sensor glitches)
+- [x] Data quality checks (overloaded trucks, sensor glitches)
 - [ ] SQL Server (T-SQL) port and dialect notes
 
 ## About
