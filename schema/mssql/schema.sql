@@ -128,10 +128,10 @@ AS RANGE RIGHT FOR VALUES (
     '2026-03-01T00:00:00-07:00', '2026-04-01T00:00:00-07:00',
     '2026-05-01T00:00:00-07:00', '2026-06-01T00:00:00-07:00',
     '2026-07-01T00:00:00-07:00');
-			 
+
 CREATE PARTITION SCHEME ps_haul_cycle_month
 AS PARTITION pf_haul_cycle_month ALL TO ([PRIMARY]);
-	 
+
 CREATE TABLE haul_cycle (
     cycle_id          bigint          IDENTITY(1,1) NOT NULL,
     truck_id          int             NOT NULL REFERENCES equipment(equipment_id),
@@ -212,5 +212,3 @@ CREATE TABLE fuel_event (
     fuel_ts        datetimeoffset  NOT NULL,
     litres         decimal(7,1) NOT NULL CHECK (litres > 0)
 );
-		
-		
