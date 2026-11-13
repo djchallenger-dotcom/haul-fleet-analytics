@@ -177,3 +177,8 @@ CREATE TABLE fuel_event (
 CREATE INDEX ON haul_cycle (truck_id, load_start_ts);
 CREATE INDEX ON haul_cycle (shift_id);
 CREATE INDEX ON fuel_event (equipment_id, fuel_ts);
+
+-- Supports per-truck downtime lookups by time: availability (01 Q3),
+-- idle-stretch causes (04 Q2), and the downtime overlap check in
+-- quality/checks.sql.
+CREATE INDEX ON downtime_event (equipment_id, start_ts);
