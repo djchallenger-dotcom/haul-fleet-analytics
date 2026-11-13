@@ -8,7 +8,7 @@ The six queries were chosen to cover the most dialect differences, not for their
 |---|---|
 | `01_fleet_kpis.sql` Q1: monthly tonnes | No `FILTER`; Windows time zone names; `DATETRUNC` |
 | `01_fleet_kpis.sql` Q3: availability | `DATEDIFF` boundary counting; `GREATEST` / `LEAST` |
-| `02_cycle_time_analysis.sql` Q1: route percentiles | `PERCENTILE_CONT` is window-only; integer `AVG` |
+| `02_cycle_time_analysis.sql` Q1: route percentiles | `PERCENTILE_CONT` is window-only; integer `AVG`; sub-second `DATEDIFF` |
 | `03_shift_comparison.sql` Q3: experience | Years of service; no `CORR`; no `GROUP BY` alias |
 | `04_downtime_gaps.sql` Q1, Q2: idle stretches | `STRING_AGG` ordering; `+` vs `\|\|`; mostly portable |
 | `05_maintenance_tree.sql` Q1, Q2: component tree | Recursive CTE rules; no subquery inside aggregates |
@@ -17,13 +17,15 @@ The six queries were chosen to cover the most dialect differences, not for their
 
 These matter most, because the query runs and returns plausible numbers.
 
-**`DATEDIFF` counts boundaries crossed, not elapsed time.** `DATEDIFF(hour, '10:59', '11:01')` returns 1, and `DATEDIFF(hour, '10:01', '10:59')` returns 0. Downtime durations were therefore measured as `DATEDIFF(second, start, end) / 3600.0`. The same rule breaks ages and tenure: `DATEDIFF(year, '2015-12-31', '2026-01-01')` returns 11 for just over 10 years of service, so the experience query subtracts a year when the anniversary has not been reached. PostgreSQL's `EXTRACT(EPOCH FROM ...)` and `age()` measure actual elapsed time.
+**`DATEDIFF` counts boundaries crossed, not elapsed time.** `DATEDIFF(hour, '10:59', '11:01')` returns 1, and `DATEDIFF(hour, '10:01', '10:59')` returns 0. The same holds at every unit, including seconds: `DATEDIFF(second, ...)` ignores fractions of a second. The generated timestamps have microsecond precision, so measuring cycle times in seconds put each cycle off by up to a second. That was enough to change one operator-experience average in the fourth decimal place and tip it across a rounding boundary (1.035 instead of 1.036). Measuring cycle minutes as `DATEDIFF_BIG(microsecond, start, end) / 60000000.0` made the results identical to PostgreSQL at six decimal places. `DATEDIFF_BIG` is required: `DATEDIFF` returns an `int`, which overflows for durations over about 35.8 minutes in microseconds. For durations measured in hours, such as downtime, seconds are precise enough and the results match after rounding.
 
-**`AVG` of an integer returns an integer in SQL Server.** PostgreSQL returns a decimal. `AVG(DATEDIFF(...))` silently drops the fraction, so values are made decimal before averaging (`/ 60.0`), and integers are cast to `float` before statistical calculations.
+The same rule breaks ages and tenure: `DATEDIFF(year, '2015-12-31', '2026-01-01')` returns 11 for just over 10 years of service, so the experience query subtracts a year when the anniversary has not been reached. PostgreSQL's `EXTRACT(EPOCH FROM ...)` and `age()` measure actual elapsed time.
 
-**Integer division truncates in both databases,** but `DATEDIFF` returns an integer where PostgreSQL's epoch arithmetic returns a decimal, so the trap appears in SQL Server code that was safe in PostgreSQL. Dividing by `3600.0` rather than `3600` avoids it.
+**`AVG` of an integer returns an integer in SQL Server.** PostgreSQL returns a decimal. `AVG(DATEDIFF(...))` silently drops the fraction, so values are made decimal before averaging, and integers are cast to `float` before statistical calculations.
 
-**Small numeric differences.** One result differed in the third decimal place (an average of 1.035 vs 1.036). Its true value is about 1.0355, on the rounding boundary, and the two databases calculate with slightly different precision: `DATEDIFF(...) / 60.0` produces a decimal with a fixed number of places, and `PERCENTILE_CONT` returns `float` in SQL Server. At six decimal places the results agree. Cross-database comparisons should allow a small tolerance rather than expect exact equality.
+**Integer division truncates in both databases,** but `DATEDIFF` returns an integer where PostgreSQL's epoch arithmetic returns a decimal, so the trap appears in SQL Server code that was safe in PostgreSQL. Dividing by a decimal literal (`3600.0`, `60000000.0`) avoids it.
+
+**Comparing results across databases.** A difference in the third decimal place looked like floating-point rounding at first, but checking at six decimal places showed the two databases agreeing only to three, which is too large for float noise. That pointed to the real cause, the second-level `DATEDIFF`. When results differ slightly, comparing at higher precision shows whether the gap is rounding noise or a real calculation difference.
 
 ## Queries
 
@@ -40,7 +42,7 @@ These matter most, because the query runs and returns plausible numbers.
 | `GROUP BY alias` | Repeat the expression, or compute it in a CTE | `ORDER BY alias` works in both |
 | `DATE_TRUNC('month', ts, 'America/Phoenix')` | `DATETRUNC(month, ts AT TIME ZONE 'US Mountain Standard Time')` | Unquoted date part; no time zone argument |
 | `ts AT TIME ZONE 'America/Phoenix'` | `ts AT TIME ZONE 'US Mountain Standard Time'` | Windows zone names; returns `datetimeoffset`, not a local timestamp |
-| `EXTRACT(EPOCH FROM end - start)` | `DATEDIFF(second, start, end)` | Note the argument order |
+| `EXTRACT(EPOCH FROM end - start)` | `DATEDIFF(second, start, end)`, or `DATEDIFF_BIG(microsecond, ...)` for sub-second precision | Note the argument order |
 | `GREATEST`, `LEAST` | Same | New in SQL Server 2022; earlier versions need `CASE` |
 | `ROUND(x, 0)` | Same | SQL Server keeps the decimal places (`1776967.0`); cast to `decimal(p,0)` for whole numbers |
 | `COALESCE` | Same (`ISNULL` also exists) | `COALESCE` used throughout because it is standard and identical in both |
