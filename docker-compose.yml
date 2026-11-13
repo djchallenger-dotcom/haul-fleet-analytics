@@ -14,5 +14,18 @@ services:
       - ./schema/postgres:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
 
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: haul-fleet-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "HaulFleet!2026"   # local demo only
+    ports:
+      - "51433:1433"
+    volumes:
+      - mssqldata:/var/opt/mssql
+
 volumes:
   pgdata:
+  mssqldata:
+
